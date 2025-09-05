@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Book, MessageSquare, Video, Share2, MapPin, Star, Settings } from 'lucide-react';
+import { Shield, Book, MessageSquare, Video, Share2, MapPin, Star, Settings, User, LogOut } from 'lucide-react';
+import { useAuth } from './contexts/AuthContext';
+import AuthModal from './components/AuthModal';
 
 // Components
 import AppHeader from './components/AppHeader';
@@ -19,18 +21,22 @@ const App = () => {
   const [currentView, setCurrentView] = useState('home');
   const [selectedState, setSelectedState] = useState('');
   const [selectedScript, setSelectedScript] = useState(null);
-  const [isSubscribed, setIsSubscribed] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState('signin');
 
   const { location, getCurrentLocation } = useGeolocation();
+  const { user, userProfile, isAuthenticated, isSubscribed, signOut, loading } = useAuth();
 
-  // Auto-detect state based on location (simplified)
+  // Auto-detect state based on user profile or location
   useEffect(() => {
-    if (location && !selectedState) {
+    if (userProfile?.state && !selectedState) {
+      setSelectedState(userProfile.state);
+    } else if (location && !selectedState) {
       // In production, use reverse geocoding API
       setSelectedState('California'); // Default for demo
     }
-  }, [location, selectedState]);
+  }, [userProfile, location, selectedState]);
 
   const handleGetLocation = () => {
     getCurrentLocation();
@@ -135,8 +141,16 @@ const App = () => {
             <p className="text-sm text-white/70">
               Get expanded script library, offline access, and advanced recording features for $5/month.
             </p>
-            <Button onClick={() => setIsSubscribed(true)}>
-              Start Free Trial
+            <Button onClick={() => {
+              if (!isAuthenticated) {
+                setAuthMode('signup');
+                setShowAuthModal(true);
+              } else {
+                // Handle subscription upgrade
+                alert('Subscription upgrade coming soon!');
+              }
+            }}>
+              {isAuthenticated ? 'Upgrade Now' : 'Sign Up for Premium'}
             </Button>
           </div>
         </Card>
@@ -433,26 +447,79 @@ const App = () => {
               <hr className="border-white/20" />
 
               <div className="space-y-2">
-                <div className="flex items-center justify-between p-3">
-                  <span>Premium Status</span>
-                  <span className={`text-sm ${isSubscribed ? 'text-green-400' : 'text-white/70'}`}>
-                    {isSubscribed ? 'Active' : 'Free'}
-                  </span>
-                </div>
-                
-                {!isSubscribed && (
-                  <Button 
-                    onClick={() => setIsSubscribed(true)}
-                    className="w-full"
-                  >
-                    Upgrade to Premium
-                  </Button>
+                {isAuthenticated ? (
+                  <>
+                    <div className="flex items-center justify-between p-3">
+                      <span>Signed in as</span>
+                      <span className="text-sm text-accent truncate max-w-32">
+                        {user?.email}
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between p-3">
+                      <span>Premium Status</span>
+                      <span className={`text-sm ${isSubscribed ? 'text-green-400' : 'text-white/70'}`}>
+                        {isSubscribed ? 'Active' : 'Free'}
+                      </span>
+                    </div>
+                    
+                    {!isSubscribed && (
+                      <Button 
+                        onClick={() => alert('Subscription upgrade coming soon!')}
+                        className="w-full"
+                      >
+                        Upgrade to Premium
+                      </Button>
+                    )}
+                    
+                    <Button 
+                      onClick={signOut}
+                      variant="secondary"
+                      className="w-full flex items-center justify-center space-x-2"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      <span>Sign Out</span>
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button 
+                      onClick={() => {
+                        setAuthMode('signin');
+                        setShowAuthModal(true);
+                        setShowMenu(false);
+                      }}
+                      className="w-full flex items-center justify-center space-x-2"
+                    >
+                      <User className="w-4 h-4" />
+                      <span>Sign In</span>
+                    </Button>
+                    
+                    <Button 
+                      onClick={() => {
+                        setAuthMode('signup');
+                        setShowAuthModal(true);
+                        setShowMenu(false);
+                      }}
+                      variant="secondary"
+                      className="w-full"
+                    >
+                      Create Account
+                    </Button>
+                  </>
                 )}
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* Authentication Modal */}
+      <AuthModal 
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        initialMode={authMode}
+      />
     </div>
   );
 };
