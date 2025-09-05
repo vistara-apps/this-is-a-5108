@@ -2,10 +2,10 @@ import OpenAI from 'openai';
 import { supabase } from '../config/supabase';
 
 // Initialize OpenAI client
-const openai = new OpenAI({
+const openai = import.meta.env.VITE_OPENAI_API_KEY ? new OpenAI({
   apiKey: import.meta.env.VITE_OPENAI_API_KEY,
   dangerouslyAllowBrowser: true // Note: In production, move this to server-side
-});
+}) : null;
 
 // AI Service for generating personalized scripts and summaries
 const generatePersonalizedScript = async (scenario, userState, userDetails = {}) => {
@@ -23,8 +23,9 @@ const generatePersonalizedScript = async (scenario, userState, userDetails = {})
       return cachedScript.script_text.replace(/\{state\}/g, userState);
     }
 
-    // Generate new script using OpenAI
-    const prompt = `Generate a professional, respectful de-escalation script for a ${scenario.replace('_', ' ')} scenario in ${userState}. 
+    // Generate new script using OpenAI (if available)
+    if (openai) {
+      const prompt = `Generate a professional, respectful de-escalation script for a ${scenario.replace('_', ' ')} scenario in ${userState}. 
 
 The script should:
 - Be respectful and non-confrontational
@@ -40,37 +41,38 @@ User background: ${userDetails.background || 'Average citizen'}
 
 Return only the script text, formatted for speaking aloud.`;
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4",
-      messages: [
-        {
-          role: "system",
-          content: "You are a legal rights expert specializing in police interactions. Generate clear, respectful scripts that help citizens exercise their constitutional rights safely."
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
-      max_tokens: 300,
-      temperature: 0.7
-    });
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4",
+        messages: [
+          {
+            role: "system",
+            content: "You are a legal rights expert specializing in police interactions. Generate clear, respectful scripts that help citizens exercise their constitutional rights safely."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        max_tokens: 300,
+        temperature: 0.7
+      });
 
-    const generatedScript = completion.choices[0].message.content;
+      const generatedScript = completion.choices[0].message.content;
 
-    // Cache the generated script
-    await supabase
-      .from('scripts')
-      .insert([
-        {
-          scenario,
-          script_text: generatedScript,
-          language: userDetails.language || 'en',
-          type: 'ai_generated'
-        }
-      ]);
+      // Cache the generated script
+      await supabase
+        .from('scripts')
+        .insert([
+          {
+            scenario,
+            script_text: generatedScript,
+            language: userDetails.language || 'en',
+            type: 'ai_generated'
+          }
+        ]);
 
-    return generatedScript;
+      return generatedScript;
+    }
   } catch (error) {
     console.error('AI script generation error:', error);
     
@@ -111,7 +113,7 @@ const generateRightsSummary = async (userState, currentContext = {}) => {
     let stateSpecificRights = '';
     if (rightsData) {
       stateSpecificRights = rightsData.content;
-    } else {
+    } else if (openai) {
       // Generate state-specific rights using AI
       const prompt = `Generate a concise, accurate summary of police interaction rights specific to ${userState}. Include:
 
@@ -141,6 +143,26 @@ Format as bullet points, be factual and legally accurate. Focus on practical inf
       });
 
       stateSpecificRights = completion.choices[0].message.content;
+    } else {
+      // Fallback when OpenAI is not available
+      stateSpecificRights = `**Your Rights in ${userState}:**
+• You have the right to remain silent
+• You can refuse searches of your person, car, or home without a warrant
+• You have the right to record police interactions in public
+• You can ask "Am I free to leave?"
+• If arrested, you have the right to an attorney
+
+**Key Points:**
+• Check local "Stop and Identify" laws for ${userState}
+• Recording police is generally legal in public spaces
+• Vehicle searches typically require consent or probable cause
+• Know your local statutes and precedents
+
+**Important:**
+• Stay calm and respectful during interactions
+• Keep hands visible at all times
+• Don't physically resist even if you believe the stop is unlawful
+• Document everything you can safely observe`;
     }
 
     const summary = `🚨 EMERGENCY RIGHTS SUMMARY - ${userState}

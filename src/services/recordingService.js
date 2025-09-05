@@ -88,6 +88,16 @@ export class RecordingService {
   // Upload recording to IPFS via Pinata
   async uploadToIPFS(blob, metadata = {}) {
     try {
+      // Check if Pinata API keys are available
+      if (!import.meta.env.VITE_PINATA_API_KEY || !import.meta.env.VITE_PINATA_SECRET_KEY) {
+        console.warn('Pinata API keys not configured, skipping IPFS upload');
+        return {
+          success: false,
+          ipfsHash: null,
+          error: 'IPFS upload not configured - Pinata API keys missing'
+        };
+      }
+
       const formData = new FormData();
       const fileName = `recording-${Date.now()}.webm`;
       formData.append('file', blob, fileName);
